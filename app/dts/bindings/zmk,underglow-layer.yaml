@@ -6,7 +6,7 @@ compatible: "zmk,underglow-layer"
 properties:
   pixel-lookup:
     type: array
-    required: true
+    required: false
 
 child-binding:
   description: "A layer to be used in a rgbmap"
