@@ -27,28 +27,9 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 extern zmk_hid_indicators_t peripheral_hid_indicators;
 #endif
 
-// Stub implementations for peripheral layer state functions
-// These provide safe defaults when the real peripheral layer functions aren't available
-static uint32_t stub_peripheral_layers = 0;
-
-void set_peripheral_layers_state(uint32_t new_layers) {
-    stub_peripheral_layers = new_layers;
-}
-
-bool peripheral_layer_active(uint8_t layer) {
-    return (stub_peripheral_layers & (BIT(layer))) == (BIT(layer));
-}
-
-uint8_t peripheral_highest_layer_active(void) {
-    if (stub_peripheral_layers > 0) {
-        for (uint8_t layer = ZMK_KEYMAP_LAYERS_LEN - 1; layer > 0; layer--) {
-            if ((stub_peripheral_layers & (BIT(layer))) == (BIT(layer)) || layer == 0) {
-                return layer;
-            }
-        }
-    }
-    return 0;
-}
+// Note: peripheral layer state functions (set_peripheral_layers_state, peripheral_layer_active, 
+// peripheral_highest_layer_active) are already implemented in peripheral_layers.c
+// This stub file only provides stubs for functions that don't exist elsewhere
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT) && !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
 
