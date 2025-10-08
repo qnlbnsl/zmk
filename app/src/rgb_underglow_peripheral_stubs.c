@@ -14,12 +14,41 @@
 #include <zmk/hid_indicators.h>
 #include <zmk/ble.h>
 #include <zmk/split/bluetooth/service.h>
+#include <zmk/split/bluetooth/peripheral_layers.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 // Stub implementations for RGB underglow status indicators on peripheral devices
 // These functions provide safe defaults for status indicators on peripherals
 // Peripherals receive actual layer state and HID indicators from the central device via BLE events
+
+// External variables that need to be declared for peripheral HID indicators
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
+extern zmk_hid_indicators_t peripheral_hid_indicators;
+#endif
+
+// Stub implementations for peripheral layer state functions
+// These provide safe defaults when the real peripheral layer functions aren't available
+static uint32_t stub_peripheral_layers = 0;
+
+void set_peripheral_layers_state(uint32_t new_layers) {
+    stub_peripheral_layers = new_layers;
+}
+
+bool peripheral_layer_active(uint8_t layer) {
+    return (stub_peripheral_layers & (BIT(layer))) == (BIT(layer));
+}
+
+uint8_t peripheral_highest_layer_active(void) {
+    if (stub_peripheral_layers > 0) {
+        for (uint8_t layer = ZMK_KEYMAP_LAYERS_LEN - 1; layer > 0; layer--) {
+            if ((stub_peripheral_layers & (BIT(layer))) == (BIT(layer)) || layer == 0) {
+                return layer;
+            }
+        }
+    }
+    return 0;
+}
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT) && !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
 
