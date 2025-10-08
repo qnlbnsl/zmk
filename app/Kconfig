@@ -349,14 +349,6 @@ config EXPERIMENTAL_RGB_LAYER
     bool "Experimental per-key per-layer RGB underglow"
     default n
 
-config ZMK_RGB_UNDERGLOW_FORCE_CENTRAL_SOURCES
-    bool "Force central device source files for RGB underglow"
-    default n
-    help
-      Enable this for peripheral devices that have RGB underglow with status indicators.
-      This forces compilation of central device source files (endpoints, keymap, etc.)
-      that are required for RGB status indicators to work on peripheral devices.
-
 endif # ZMK_RGB_UNDERGLOW
 
 menuconfig ZMK_BACKLIGHT

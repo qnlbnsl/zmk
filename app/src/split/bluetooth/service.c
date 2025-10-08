@@ -79,12 +79,12 @@ static void split_svc_pos_state_ccc(const struct bt_gatt_attr *attr, uint16_t va
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
 
-static zmk_hid_indicators_t hid_indicators = 0;
+zmk_hid_indicators_t peripheral_hid_indicators = 0;
 
 static void split_svc_update_indicators_callback(struct k_work *work) {
-    LOG_DBG("Raising HID indicators changed event: %x", hid_indicators);
+    LOG_DBG("Raising HID indicators changed event: %x", peripheral_hid_indicators);
     raise_zmk_hid_indicators_changed(
-        (struct zmk_hid_indicators_changed){.indicators = hid_indicators});
+        (struct zmk_hid_indicators_changed){.indicators = peripheral_hid_indicators});
 }
 
 static K_WORK_DEFINE(split_svc_update_indicators_work, split_svc_update_indicators_callback);
@@ -96,7 +96,7 @@ static ssize_t split_svc_update_indicators(struct bt_conn *conn, const struct bt
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
     }
 
-    memcpy((uint8_t *)&hid_indicators + offset, buf, len);
+    memcpy((uint8_t *)&peripheral_hid_indicators + offset, buf, len);
 
     k_work_submit(&split_svc_update_indicators_work);
 

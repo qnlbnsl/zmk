@@ -8,6 +8,7 @@
 
 #include <zmk/events/sensor_event.h>
 #include <zmk/sensors.h>
+#include <zmk/hid_indicators_types.h>
 
 #define ZMK_SPLIT_RUN_BEHAVIOR_DEV_LEN 9
 
@@ -37,3 +38,8 @@ struct zmk_split_input_event_payload {
     uint32_t value;
     uint8_t sync;
 } __packed;
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
+// HID indicators received from central device and stored on peripheral
+extern zmk_hid_indicators_t peripheral_hid_indicators;
+#endif

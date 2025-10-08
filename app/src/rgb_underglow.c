@@ -404,7 +404,11 @@ static int zmk_led_generate_status(void) {
 
     // LAYER STATUS
     for (uint8_t i = 0; i < DT_PROP_LEN(UNDERGLOW_INDICATORS, layer_state); i++) {
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
         if (zmk_keymap_layer_active(i))
+#else
+        if (peripheral_layer_active(i))
+#endif
             status_pixels[underglow_layer_state[i]] = magenta;
     }
 
