@@ -81,6 +81,16 @@ if ((NOT CONFIG_ZMK_SPLIT) OR CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
     target_sources(app PRIVATE src/ble.c)
     target_sources(app PRIVATE src/hog.c)
   endif()
+else()
+  # For peripheral devices, we still need some core functionality for RGB underglow
+  # with status indicators. These are the minimal required files.
+  target_sources(app PRIVATE src/endpoints.c)
+  target_sources(app PRIVATE src/keymap.c)
+  target_sources_ifdef(CONFIG_ZMK_HID_INDICATORS app PRIVATE src/hid_indicators.c)
+  
+  if (CONFIG_ZMK_BLE)
+    target_sources(app PRIVATE src/ble.c)
+  endif()
 endif()
 
 target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_rgb_underglow.c)
