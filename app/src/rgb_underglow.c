@@ -967,9 +967,6 @@ static int rgb_underglow_event_listener(const zmk_event_t *eh) {
         const struct zmk_split_peripheral_layer_changed *ev =
             as_zmk_split_peripheral_layer_changed(eh);
         LOG_DBG("zmk_split_peripheral_layer_changed: %08x", ev->layers);
-#if !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
-        set_peripheral_layers_state(ev->layers);
-#endif
         uint8_t layer = rgb_underglow_top_layer();
         LOG_DBG("top layer: %d", layer);
         zmk_rgb_underglow_set_layer(layer, true);
