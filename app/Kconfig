@@ -333,7 +333,10 @@ config ZMK_RGB_UNDERGLOW_SPD_START
 
 config ZMK_RGB_UNDERGLOW_EFF_START
     int "RGB underglow start effect int value related to the effect enum list"
+    range 0 4 if EXPERIMENTAL_RGB_LAYER
     range 0 3
+    help
+      0 solid, 1 breathe, 2 spectrum, 3 swirl, 4 layer indicators (EXPERIMENTAL_RGB_LAYER).
 
 config ZMK_RGB_UNDERGLOW_ON_START
     bool "RGB underglow starts on by default"
