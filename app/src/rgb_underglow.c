@@ -563,6 +563,11 @@ static int zmk_rgb_underglow_init(void) {
         animation_step : 0,
         on : IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_ON_START)
     };
+#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
+    // Starting on with the layer effect must enable layer indicators too (as
+    // zmk_rgb_underglow_on() does), otherwise the LEDs stay dark until RGB is toggled.
+    state.layer_enabled = state.on && state.current_effect == UNDERGLOW_EFFECT_LAYER_INDICATORS;
+#endif
 
 #if IS_ENABLED(CONFIG_SETTINGS)
     k_work_init_delayable(&underglow_save_work, zmk_rgb_underglow_save_state_work);

@@ -351,6 +351,54 @@ config EXPERIMENTAL_RGB_LAYER
 
 endif # ZMK_RGB_UNDERGLOW
 
+config ZMK_RGB_UNDERGLOW_FORWARD
+    bool "Forward RGB underglow behaviors from a central without an LED strip"
+    depends on !ZMK_RGB_UNDERGLOW && ZMK_SPLIT && ZMK_SPLIT_ROLE_CENTRAL
+    help
+      Build the &rgb_ug behavior on a split central that has no underglow of its own (e.g. a
+      dongle), so RGB keys are converted and forwarded to the peripherals instead of dropped.
+      The FORWARD_* start values should match the peripherals' underglow configuration.
+
+if ZMK_RGB_UNDERGLOW_FORWARD
+
+config ZMK_RGB_UNDERGLOW_FORWARD_ON_START
+    bool "Peripherals start with underglow on"
+    default y
+
+config ZMK_RGB_UNDERGLOW_FORWARD_EFF_COUNT
+    int "Number of underglow effects on the peripherals (5 with EXPERIMENTAL_RGB_LAYER)"
+    default 5
+
+config ZMK_RGB_UNDERGLOW_FORWARD_EFF_START
+    int "Peripherals' start effect (4 = layer indicators)"
+    default 4
+
+config ZMK_RGB_UNDERGLOW_FORWARD_HUE_START
+    int "Peripherals' start hue"
+    default 285
+
+config ZMK_RGB_UNDERGLOW_FORWARD_SAT_START
+    int "Peripherals' start saturation"
+    default 75
+
+config ZMK_RGB_UNDERGLOW_FORWARD_BRT_START
+    int "Peripherals' start brightness"
+    default 16
+
+config ZMK_RGB_UNDERGLOW_FORWARD_HUE_STEP
+    int "Hue step"
+    default 10
+
+config ZMK_RGB_UNDERGLOW_FORWARD_SAT_STEP
+    int "Saturation step"
+    default 10
+
+config ZMK_RGB_UNDERGLOW_FORWARD_BRT_STEP
+    int "Brightness step"
+    default 4
+
+endif # ZMK_RGB_UNDERGLOW_FORWARD
+
 menuconfig ZMK_BACKLIGHT
     bool "LED backlight"
     select LED

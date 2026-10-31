@@ -89,6 +89,8 @@ if (CONFIG_ZMK_RGB_UNDERGLOW AND CONFIG_ZMK_SPLIT AND NOT CONFIG_ZMK_SPLIT_ROLE_
 endif()
 
 target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_rgb_underglow.c)
+target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW_FORWARD app PRIVATE src/behaviors/behavior_rgb_underglow.c)
+target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW_FORWARD app PRIVATE src/rgb_underglow_forward.c)
 target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_underglow_color.c)
 target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_underglow_indicators.c)
 target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_underglow_battery.c)
