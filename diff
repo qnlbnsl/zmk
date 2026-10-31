@@ -1,0 +1,1659 @@
+diff --git a/app/CMakeLists.txt b/app/CMakeLists.txt
+index 60c502fcd2a..e062c2b6677 100644
+--- a/app/CMakeLists.txt
++++ b/app/CMakeLists.txt
+@@ -71,16 +71,12 @@ if ((NOT CONFIG_ZMK_SPLIT) OR CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+   target_sources(app PRIVATE src/behavior_queue.c)
+   target_sources(app PRIVATE src/conditional_layer.c)
+   target_sources(app PRIVATE src/endpoints.c)
+-  target_sources(app PRIVATE src/events/endpoint_changed.c)
+   target_sources(app PRIVATE src/hid_listener.c)
+   target_sources(app PRIVATE src/keymap.c)
+-  target_sources(app PRIVATE src/events/layer_state_changed.c)
+-  target_sources(app PRIVATE src/events/modifiers_state_changed.c)
+   target_sources(app PRIVATE src/events/keycode_state_changed.c)
+   target_sources_ifdef(CONFIG_ZMK_HID_INDICATORS app PRIVATE src/hid_indicators.c)
+ 
+   if (CONFIG_ZMK_BLE)
+-    target_sources(app PRIVATE src/events/ble_active_profile_changed.c)
+     target_sources(app PRIVATE src/behaviors/behavior_bt.c)
+     target_sources(app PRIVATE src/ble.c)
+     target_sources(app PRIVATE src/hog.c)
+@@ -88,6 +84,10 @@ if ((NOT CONFIG_ZMK_SPLIT) OR CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+ endif()
+ 
+ target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_rgb_underglow.c)
++target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_underglow_color.c)
++target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_underglow_indicators.c)
++target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_underglow_battery.c)
++target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/events/underglow_color_changed.c)
+ target_sources_ifdef(CONFIG_ZMK_BACKLIGHT app PRIVATE src/behaviors/behavior_backlight.c)
+ 
+ target_sources_ifdef(CONFIG_ZMK_BATTERY_REPORTING app PRIVATE src/events/battery_state_changed.c)
+@@ -95,12 +95,21 @@ target_sources_ifdef(CONFIG_ZMK_BATTERY_REPORTING app PRIVATE src/battery.c)
+ 
+ target_sources_ifdef(CONFIG_ZMK_HID_INDICATORS app PRIVATE src/events/hid_indicators_changed.c)
+ 
++target_sources_ifdef(CONFIG_ZMK_BLE app PRIVATE src/events/ble_active_profile_changed.c)
++
+ target_sources_ifdef(CONFIG_ZMK_SPLIT app PRIVATE src/events/split_peripheral_status_changed.c)
++target_sources_ifdef(CONFIG_ZMK_SPLIT app PRIVATE src/events/split_peripheral_layer_changed.c)
++
++target_sources(app PRIVATE src/events/layer_state_changed.c)
++target_sources(app PRIVATE src/events/modifiers_state_changed.c)
++target_sources(app PRIVATE src/events/endpoint_changed.c)
++
+ add_subdirectory_ifdef(CONFIG_ZMK_SPLIT src/split)
+ 
+ target_sources_ifdef(CONFIG_USB_DEVICE_STACK app PRIVATE src/usb.c)
+ target_sources_ifdef(CONFIG_ZMK_USB app PRIVATE src/usb_hid.c)
+ target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/rgb_underglow.c)
++target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/rgb_underglow_layer.c)
+ target_sources_ifdef(CONFIG_ZMK_BACKLIGHT app PRIVATE src/backlight.c)
+ target_sources_ifdef(CONFIG_ZMK_LOW_PRIORITY_WORK_QUEUE app PRIVATE src/workqueue.c)
+ target_sources(app PRIVATE src/main.c)
+diff --git a/app/Kconfig b/app/Kconfig
+index 01de7dcdcf5..73042f16fd9 100644
+--- a/app/Kconfig
++++ b/app/Kconfig
+@@ -345,6 +345,10 @@ config ZMK_RGB_UNDERGLOW_AUTO_OFF_USB
+     bool "Turn off RGB underglow when USB is disconnected"
+     depends on USB_DEVICE_STACK
+ 
++config EXPERIMENTAL_RGB_LAYER
++    bool "Experimental per-key per-layer RGB underglow"
++    default n
++
+ endif # ZMK_RGB_UNDERGLOW
+ 
+ menuconfig ZMK_BACKLIGHT
+diff --git a/app/boards/arm/glove80/glove80_lh.dts b/app/boards/arm/glove80/glove80_lh.dts
+index f37661c68a4..f98c81f9317 100644
+--- a/app/boards/arm/glove80/glove80_lh.dts
++++ b/app/boards/arm/glove80/glove80_lh.dts
+@@ -20,6 +20,14 @@
+         zmk,underglow-indicators = &underglow_indicators;
+     };
+ 
++    underglow-layer {
++        compatible  = "zmk,underglow-layer";
++        pixel-lookup = <52>, <53>, <54>, <69>, <70>, <71>, <15>, <27>, <39>, <51>, <4>,  <14>, <26>, <38>,
++                    <50>, <68>, <3>,  <13>, <25>, <37>, <49>, <67>, <2>,  <12>, <24>, <36>, <48>, <66>,
++                    <1>,  <11>, <23>, <35>, <47>, <65>, <0>,  <10>, <22>, <34>, <46>, <64>;
++    };
++
++
+     back_led_backlight: pwmleds {
+         compatible = "pwm-leds";
+         pwm_led_0 {
+diff --git a/app/boards/arm/glove80/glove80_lh_defconfig b/app/boards/arm/glove80/glove80_lh_defconfig
+index 57c72c8be9d..d36173bb1d8 100644
+--- a/app/boards/arm/glove80/glove80_lh_defconfig
++++ b/app/boards/arm/glove80/glove80_lh_defconfig
+@@ -102,6 +102,9 @@ CONFIG_ZMK_HID_CONSUMER_REPORT_USAGES_BASIC=y
+ CONFIG_ZMK_USB_BOOT=y
+ CONFIG_ZMK_HID_INDICATORS=y
+ 
++# Send HID indicator to peripherals
++CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS=y
++
+ # Turn on debugging to disable optimization. Debug messages can result in larger
+ # stacks, so enable stack protection and particularly a larger BLE peripheral stack.
+ # CONFIG_DEBUG=y
+diff --git a/app/boards/arm/glove80/glove80_rh.dts b/app/boards/arm/glove80/glove80_rh.dts
+index 7b54f62c858..0cb16518425 100644
+--- a/app/boards/arm/glove80/glove80_rh.dts
++++ b/app/boards/arm/glove80/glove80_rh.dts
+@@ -20,6 +20,14 @@
+         zmk,battery   = &vbatt;
+     };
+ 
++    underglow-layer {
++        compatible  = "zmk,underglow-layer";
++        pixel-lookup = <57>, <56>, <55>, <74>, <73>, <72>, <16>, <28>, <40>, <58>, <5>,  <17>, <29>, <41>,
++                    <59>, <75>, <6>,  <18>, <30>, <42>, <60>, <76>, <7>,  <19>, <31>, <43>, <61>, <77>,
++                    <8>,  <20>, <32>, <44>, <62>, <78>, <9>,  <21>, <33>, <45>, <63>, <79>;
++    };
++
++
+     back_led_backlight: pwmleds {
+         compatible = "pwm-leds";
+         pwm_led_0 {
+diff --git a/app/boards/arm/glove80/glove80_rh_defconfig b/app/boards/arm/glove80/glove80_rh_defconfig
+index 4394bee2ad2..ebceb6c4530 100644
+--- a/app/boards/arm/glove80/glove80_rh_defconfig
++++ b/app/boards/arm/glove80/glove80_rh_defconfig
+@@ -69,6 +69,10 @@ CONFIG_ZMK_RGB_UNDERGLOW_HUE_START=285
+ CONFIG_ZMK_RGB_UNDERGLOW_SAT_START=75
+ CONFIG_ZMK_RGB_UNDERGLOW_BRT_START=16
+ 
++# Enable HID indicators on peripheral
++CONFIG_ZMK_HID_INDICATORS=y
++CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS=y
++
+ # The power LED is implemented as a backlight
+ # For now, the power LED is acting as a "USB connected" indicator
+ CONFIG_ZMK_BACKLIGHT=y
+diff --git a/app/dts/behaviors.dtsi b/app/dts/behaviors.dtsi
+index 653b085d5c5..1f87ef1a7fe 100644
+--- a/app/dts/behaviors.dtsi
++++ b/app/dts/behaviors.dtsi
+@@ -28,3 +28,6 @@
+ #include <behaviors/soft_off.dtsi>
+ #include <behaviors/studio_unlock.dtsi>
+ #include <behaviors/mouse_keys.dtsi>
++#include <behaviors/ug_color.dtsi>
++#include <behaviors/ug_indicators.dtsi>
++#include <behaviors/ug_battery.dtsi>
+diff --git a/app/dts/behaviors/ug_battery.dtsi b/app/dts/behaviors/ug_battery.dtsi
+new file mode 100644
+index 00000000000..3e5f75cc65e
+--- /dev/null
++++ b/app/dts/behaviors/ug_battery.dtsi
+@@ -0,0 +1,34 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++/ {
++    behaviors {
++        ug_b2: ugbat20 {
++            compatible = "zmk,behavior-underglow-battery";
++            threshold = <20>;
++            #binding-cells = <2>;
++            display-name = "Underglow Battery level 20%";
++        };
++        ug_b4: ugbat40 {
++            compatible = "zmk,behavior-underglow-battery";
++            threshold = <40>;
++            #binding-cells = <2>;
++            display-name = "Underglow Battery level 40%";
++        };
++        ug_b6: ugbat60 {
++            compatible = "zmk,behavior-underglow-battery";
++            threshold = <60>;
++            #binding-cells = <2>;
++            display-name = "Underglow Battery level 60%";
++        };
++        ug_b8: ugbat80 {
++            compatible = "zmk,behavior-underglow-battery";
++            threshold = <80>;
++            #binding-cells = <2>;
++            display-name = "Underglow Battery level 80%";
++        };
++    };
++};
+diff --git a/app/dts/behaviors/ug_color.dtsi b/app/dts/behaviors/ug_color.dtsi
+new file mode 100644
+index 00000000000..15d6c8630f2
+--- /dev/null
++++ b/app/dts/behaviors/ug_color.dtsi
+@@ -0,0 +1,15 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++/ {
++    behaviors {
++        ug: ugcolor {
++            compatible = "zmk,behavior-underglow-color";
++            #binding-cells = <1>;
++            display-name = "Underglow Color";
++        };
++    };
++};
+diff --git a/app/dts/behaviors/ug_indicators.dtsi b/app/dts/behaviors/ug_indicators.dtsi
+new file mode 100644
+index 00000000000..b62c79b7795
+--- /dev/null
++++ b/app/dts/behaviors/ug_indicators.dtsi
+@@ -0,0 +1,33 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#include <dt-bindings/zmk/hid_indicators.h>
++
++/ {
++    behaviors {
++        ug_nl: ugnumlk {
++            compatible = "zmk,behavior-underglow-indicators";
++            indicator = <NUM_LOCK>;
++            #binding-cells = <2>;
++            display-name = "Underglow NumLock indicator";
++        };
++
++        ug_cl: ugcapslk {
++            compatible = "zmk,behavior-underglow-indicators";
++            indicator = <CAPS_LOCK>;
++            #binding-cells = <2>;
++            display-name = "Underglow CapsLock indicator";
++        };
++
++        ug_sl: ugscrllk {
++            compatible = "zmk,behavior-underglow-indicators";
++            indicator = <SCROLL_LOCK>;
++            #binding-cells = <2>;
++            display-name = "Underglow ScrollLock indicator";
++        };
++
++    };
++};
+diff --git a/app/dts/bindings/behaviors/zmk,behavior-underglow-battery.yaml b/app/dts/bindings/behaviors/zmk,behavior-underglow-battery.yaml
+new file mode 100644
+index 00000000000..4c535ea5505
+--- /dev/null
++++ b/app/dts/bindings/behaviors/zmk,behavior-underglow-battery.yaml
+@@ -0,0 +1,12 @@
++# Copyright (c) 2024, The ZMK Contributors
++# SPDX-License-Identifier: MIT
++
++description: Set underglow color based on battery level
++
++compatible: "zmk,behavior-underglow-battery"
++
++include: two_param.yaml
++
++properties:
++  threshold:
++    type: int
+diff --git a/app/dts/bindings/behaviors/zmk,behavior-underglow-color.yaml b/app/dts/bindings/behaviors/zmk,behavior-underglow-color.yaml
+new file mode 100644
+index 00000000000..b3e902787cc
+--- /dev/null
++++ b/app/dts/bindings/behaviors/zmk,behavior-underglow-color.yaml
+@@ -0,0 +1,8 @@
++# Copyright (c) 2024, The ZMK Contributors
++# SPDX-License-Identifier: MIT
++
++description: Set underglow to specified color
++
++compatible: "zmk,behavior-underglow-color"
++
++include: one_param.yaml
+diff --git a/app/dts/bindings/behaviors/zmk,behavior-underglow-indicators.yaml b/app/dts/bindings/behaviors/zmk,behavior-underglow-indicators.yaml
+new file mode 100644
+index 00000000000..553bb6c894f
+--- /dev/null
++++ b/app/dts/bindings/behaviors/zmk,behavior-underglow-indicators.yaml
+@@ -0,0 +1,13 @@
++# Copyright (c) 2024, The ZMK Contributors
++# SPDX-License-Identifier: MIT
++
++description: Set underglow for num lock indicator
++
++compatible: "zmk,behavior-underglow-indicators"
++
++include: two_param.yaml
++
++properties:
++  indicator:
++    type: int
++    default: 0
+diff --git a/app/dts/bindings/zmk,underglow-layer.yaml b/app/dts/bindings/zmk,underglow-layer.yaml
+new file mode 100644
+index 00000000000..28221039267
+--- /dev/null
++++ b/app/dts/bindings/zmk,underglow-layer.yaml
+@@ -0,0 +1,24 @@
++description: |
++  Allows defining a rgbmap composed of multiple layers
++
++compatible: "zmk,underglow-layer"
++
++properties:
++  pixel-lookup:
++    type: array
++    required: true
++
++child-binding:
++  description: "A layer to be used in a rgbmap"
++
++  properties:
++    bindings:
++      type: phandle-array
++      required: true
++    layer-id:
++      type: int
++      required: true
++    fade-delay:
++      type: int
++      required: false
++      default: -1
+diff --git a/app/include/dt-bindings/zmk/hid_indicators.h b/app/include/dt-bindings/zmk/hid_indicators.h
+new file mode 100644
+index 00000000000..860c81dbdcd
+--- /dev/null
++++ b/app/include/dt-bindings/zmk/hid_indicators.h
+@@ -0,0 +1,9 @@
++/*
++ * Copyright (c) 2020 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#define NUM_LOCK 0
++#define CAPS_LOCK 1
++#define SCROLL_LOCK 2
+diff --git a/app/include/dt-bindings/zmk/rgb_colors.h b/app/include/dt-bindings/zmk/rgb_colors.h
+new file mode 100644
+index 00000000000..73e9cc1f4fe
+--- /dev/null
++++ b/app/include/dt-bindings/zmk/rgb_colors.h
+@@ -0,0 +1,18 @@
++/*
++ * Copyright (c) 2021 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#define GREEN 0x00ff00
++#define RED 0xff0000
++#define BLUE 0x0000ff
++#define TEAL 0x008080
++#define ORANGE 0xffa500
++#define YELLOW 0xffff00
++#define GOLD 0xffd700
++#define PURPLE 0x800080
++#define PINK 0xffc0cb
++#define WHITE 0xffffff
++#define ___ 0x000000
++#define BLACK 0x000000
+\ No newline at end of file
+diff --git a/app/include/zmk/events/split_peripheral_layer_changed.h b/app/include/zmk/events/split_peripheral_layer_changed.h
+new file mode 100644
+index 00000000000..2445c164f5c
+--- /dev/null
++++ b/app/include/zmk/events/split_peripheral_layer_changed.h
+@@ -0,0 +1,16 @@
++/*
++ * Copyright (c) 2022 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#pragma once
++
++#include <zephyr/kernel.h>
++#include <zmk/event_manager.h>
++
++struct zmk_split_peripheral_layer_changed {
++    uint32_t layers;
++};
++
++ZMK_EVENT_DECLARE(zmk_split_peripheral_layer_changed);
+diff --git a/app/include/zmk/events/underglow_color_changed.h b/app/include/zmk/events/underglow_color_changed.h
+new file mode 100644
+index 00000000000..0d0ddf37dc1
+--- /dev/null
++++ b/app/include/zmk/events/underglow_color_changed.h
+@@ -0,0 +1,16 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#pragma once
++
++#include <zmk/event_manager.h>
++
++struct zmk_underglow_color_changed {
++    uint32_t layers;
++    bool wakeup;
++};
++
++ZMK_EVENT_DECLARE(zmk_underglow_color_changed);
+diff --git a/app/include/zmk/rgb_underglow.h b/app/include/zmk/rgb_underglow.h
+index 0c45e1c68f7..f00dcd5e257 100644
+--- a/app/include/zmk/rgb_underglow.h
++++ b/app/include/zmk/rgb_underglow.h
+@@ -16,6 +16,8 @@ int zmk_rgb_underglow_toggle(void);
+ int zmk_rgb_underglow_get_state(bool *state);
+ int zmk_rgb_underglow_on(void);
+ int zmk_rgb_underglow_off(void);
++int zmk_rgb_underglow_transient_on(void);
++int zmk_rgb_underglow_transient_off(void);
+ int zmk_rgb_underglow_cycle_effect(int direction);
+ int zmk_rgb_underglow_calc_effect(int direction);
+ int zmk_rgb_underglow_select_effect(int effect);
+diff --git a/app/include/zmk/rgb_underglow_layer.h b/app/include/zmk/rgb_underglow_layer.h
+new file mode 100644
+index 00000000000..1b14359e691
+--- /dev/null
++++ b/app/include/zmk/rgb_underglow_layer.h
+@@ -0,0 +1,31 @@
++/*
++ * Copyright (c) 2020 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#pragma once
++#include <zmk/keymap.h>
++
++#define ZMK_RGB_CHILD_LEN_PLUS_ONE(node) 1 +
++
++#define ZMK_RGBMAP_LAYERS_LEN                                                                      \
++    (DT_FOREACH_CHILD(DT_INST(0, zmk_underglow_layer), ZMK_RGB_CHILD_LEN_PLUS_ONE) 0)
++
++#define ZMK_RGBMAP_EXTRACT_BINDING(idx, drv_inst)                                                  \
++    {                                                                                              \
++        .behavior_dev = DEVICE_DT_NAME(DT_PHANDLE_BY_IDX(drv_inst, bindings, idx)),                \
++        .param1 = COND_CODE_0(DT_PHA_HAS_CELL_AT_IDX(drv_inst, bindings, idx, param1), (0),        \
++                              (DT_PHA_BY_IDX(drv_inst, bindings, idx, param1))),                   \
++        .param2 = COND_CODE_0(DT_PHA_HAS_CELL_AT_IDX(drv_inst, bindings, idx, param2), (0),        \
++                              (DT_PHA_BY_IDX(drv_inst, bindings, idx, param2))),                   \
++    }
++
++const int rgb_pixel_lookup(int idx);
++const int zmk_rgbmap_id(uint8_t layer);
++const int zmk_rgbmap_fade_delay(uint8_t layer);
++
++const struct zmk_behavior_binding *rgb_underglow_get_bindings(uint8_t layer);
++
++uint8_t rgb_underglow_top_layer_with_state(uint32_t state_to_test);
++uint8_t rgb_underglow_top_layer(void);
+\ No newline at end of file
+diff --git a/app/include/zmk/split/bluetooth/peripheral_layers.h b/app/include/zmk/split/bluetooth/peripheral_layers.h
+new file mode 100644
+index 00000000000..974a322c9c0
+--- /dev/null
++++ b/app/include/zmk/split/bluetooth/peripheral_layers.h
+@@ -0,0 +1,5 @@
++#pragma once
++
++void set_peripheral_layers_state(uint32_t new_layers);
++bool peripheral_layer_active(uint8_t layer);
++uint8_t peripheral_highest_layer_active(void);
+\ No newline at end of file
+diff --git a/app/include/zmk/split/bluetooth/uuid.h b/app/include/zmk/split/bluetooth/uuid.h
+index c9a63efa702..6380e08f231 100644
+--- a/app/include/zmk/split/bluetooth/uuid.h
++++ b/app/include/zmk/split/bluetooth/uuid.h
+@@ -20,3 +20,4 @@
+ #define ZMK_SPLIT_BT_UPDATE_HID_INDICATORS_UUID ZMK_BT_SPLIT_UUID(0x00000004)
+ #define ZMK_SPLIT_BT_SELECT_PHYS_LAYOUT_UUID ZMK_BT_SPLIT_UUID(0x00000005)
+ #define ZMK_SPLIT_BT_INPUT_EVENT_UUID ZMK_BT_SPLIT_UUID(0x00000006)
++#define ZMK_SPLIT_BT_UPDATE_LAYERS_UUID ZMK_BT_SPLIT_UUID(0x00000007)
+diff --git a/app/include/zmk/split/central.h b/app/include/zmk/split/central.h
+index ff971bfc607..3fcf17f23b9 100644
+--- a/app/include/zmk/split/central.h
++++ b/app/include/zmk/split/central.h
+@@ -46,3 +46,5 @@ int zmk_split_central_update_hid_indicator(zmk_hid_indicators_t indicators);
+ int zmk_split_central_get_peripheral_battery_level(uint8_t source, uint8_t *level);
+ 
+ #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
++
++int zmk_split_central_update_layers(uint32_t layers);
+diff --git a/app/src/activity.c b/app/src/activity.c
+index b109d46d841..161771df8fd 100644
+--- a/app/src/activity.c
++++ b/app/src/activity.c
+@@ -16,6 +16,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+ #include <zmk/event_manager.h>
+ #include <zmk/events/activity_state_changed.h>
+ #include <zmk/events/position_state_changed.h>
++#include <zmk/events/split_peripheral_layer_changed.h>
+ #include <zmk/events/sensor_event.h>
+ 
+ #include <zmk/pm.h>
+@@ -109,6 +110,7 @@ static int activity_init(void) {
+ ZMK_LISTENER(activity, activity_event_listener);
+ ZMK_SUBSCRIPTION(activity, zmk_position_state_changed);
+ ZMK_SUBSCRIPTION(activity, zmk_sensor_event);
++ZMK_SUBSCRIPTION(activity, zmk_split_peripheral_layer_changed);
+ 
+ #if IS_ENABLED(CONFIG_ZMK_POINTING)
+ 
+diff --git a/app/src/behaviors/behavior_underglow_battery.c b/app/src/behaviors/behavior_underglow_battery.c
+new file mode 100644
+index 00000000000..e369f8428d2
+--- /dev/null
++++ b/app/src/behaviors/behavior_underglow_battery.c
+@@ -0,0 +1,77 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#define DT_DRV_COMPAT zmk_behavior_underglow_battery
++
++// Dependencies
++#include <zephyr/device.h>
++#include <drivers/behavior.h>
++#include <zephyr/logging/log.h>
++#include <zmk/battery.h>
++#include <zmk/event_manager.h>
++#include <zmk/events/battery_state_changed.h>
++#include <zmk/events/underglow_color_changed.h>
++
++LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
++
++#if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
++
++struct underglow_battery_data {
++    uint32_t layers;
++};
++
++struct underglow_battery_config {
++    int threshold;
++};
++
++static struct underglow_battery_data underglow_battery_data = {.layers = 0};
++
++static int underglow_battery_init(const struct device *dev) { return 0; };
++
++static int underglow_battery_process(struct zmk_behavior_binding *binding,
++                                     struct zmk_behavior_binding_event event) {
++    const struct device *dev = zmk_behavior_get_binding(binding->behavior_dev);
++    const struct underglow_battery_config *config = dev->config;
++    struct underglow_battery_data *data = dev->data;
++    data->layers |= BIT(event.layer);
++    int bat = zmk_battery_state_of_charge();
++
++    if (bat >= config->threshold)
++        return binding->param2;
++    else
++        return binding->param1;
++}
++
++static const struct behavior_driver_api underglow_battery_driver_api = {
++    .binding_pressed = underglow_battery_process,
++    .locality = BEHAVIOR_LOCALITY_GLOBAL,
++#if IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
++    .get_parameter_metadata = zmk_behavior_get_empty_param_metadata,
++#endif // IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
++};
++
++static int underglow_battery_listener(const zmk_event_t *eh);
++
++ZMK_LISTENER(behavior_underglow_battery, underglow_battery_listener);
++ZMK_SUBSCRIPTION(behavior_underglow_battery, zmk_battery_state_changed);
++
++static int underglow_battery_listener(const zmk_event_t *eh) {
++    raise_zmk_underglow_color_changed((struct zmk_underglow_color_changed){
++        .layers = underglow_battery_data.layers, .wakeup = false});
++
++    return ZMK_EV_EVENT_BUBBLE;
++}
++
++#define KP_INST(n)                                                                                 \
++    static struct underglow_battery_config underglow_battery_config_##n = {                        \
++        .threshold = DT_INST_PROP(n, threshold)};                                                  \
++    BEHAVIOR_DT_INST_DEFINE(n, underglow_battery_init, NULL, &underglow_battery_data,              \
++                            &underglow_battery_config_##n, POST_KERNEL,                            \
++                            CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &underglow_battery_driver_api);
++
++DT_INST_FOREACH_STATUS_OKAY(KP_INST)
++
++#endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
+diff --git a/app/src/behaviors/behavior_underglow_color.c b/app/src/behaviors/behavior_underglow_color.c
+new file mode 100644
+index 00000000000..29000aab661
+--- /dev/null
++++ b/app/src/behaviors/behavior_underglow_color.c
+@@ -0,0 +1,39 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#define DT_DRV_COMPAT zmk_behavior_underglow_color
++
++// Dependencies
++#include <zephyr/device.h>
++#include <drivers/behavior.h>
++#include <zephyr/logging/log.h>
++
++LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
++
++#if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
++
++// Initialization Function
++static int underglow_color_init(const struct device *dev) { return 0; };
++
++static int underglow_color_process(struct zmk_behavior_binding *binding,
++                                   struct zmk_behavior_binding_event event) {
++    return binding->param1;
++}
++
++// API Structure
++static const struct behavior_driver_api underglow_color_driver_api = {
++    .binding_pressed = underglow_color_process,
++    .locality = BEHAVIOR_LOCALITY_GLOBAL,
++#if IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
++    .get_parameter_metadata = zmk_behavior_get_empty_param_metadata,
++#endif // IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
++
++};
++
++BEHAVIOR_DT_INST_DEFINE(0, underglow_color_init, NULL, NULL, NULL, POST_KERNEL,
++                        CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &underglow_color_driver_api);
++
++#endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
+diff --git a/app/src/behaviors/behavior_underglow_indicators.c b/app/src/behaviors/behavior_underglow_indicators.c
+new file mode 100644
+index 00000000000..92ca2519fd2
+--- /dev/null
++++ b/app/src/behaviors/behavior_underglow_indicators.c
+@@ -0,0 +1,80 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#define DT_DRV_COMPAT zmk_behavior_underglow_indicators
++
++// Dependencies
++#include <zephyr/device.h>
++#include <drivers/behavior.h>
++#include <zephyr/logging/log.h>
++#include <zmk/hid_indicators.h>
++#include <zmk/event_manager.h>
++#include <zmk/events/hid_indicators_changed.h>
++#include <zmk/events/underglow_color_changed.h>
++
++LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
++
++#if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
++
++struct underglow_indicators_data {
++    zmk_hid_indicators_t indicators;
++    uint32_t layers;
++};
++
++struct underglow_indicators_config {
++    int indicator;
++};
++
++static int underglow_indicators_init(const struct device *dev) { return 0; };
++
++static int underglow_indicators_process(struct zmk_behavior_binding *binding,
++                                        struct zmk_behavior_binding_event event) {
++    const struct device *dev = zmk_behavior_get_binding(binding->behavior_dev);
++    struct underglow_indicators_data *data = dev->data;
++    const struct underglow_indicators_config *config = dev->config;
++    data->layers |= BIT(event.layer);
++
++    if (data->indicators & BIT(config->indicator))
++        return binding->param2;
++    else
++        return binding->param1;
++}
++
++static const struct behavior_driver_api underglow_indicators_driver_api = {
++    .binding_pressed = underglow_indicators_process,
++    .locality = BEHAVIOR_LOCALITY_GLOBAL,
++#if IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
++    .get_parameter_metadata = zmk_behavior_get_empty_param_metadata,
++#endif // IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
++};
++
++static int underglow_indicators_listener(const zmk_event_t *eh);
++
++ZMK_LISTENER(behavior_underglow_indicators, underglow_indicators_listener);
++ZMK_SUBSCRIPTION(behavior_underglow_indicators, zmk_hid_indicators_changed);
++
++static struct underglow_indicators_data underglow_indicators_data = {.indicators = 0, .layers = 0};
++
++static int underglow_indicators_listener(const zmk_event_t *eh) {
++    const struct zmk_hid_indicators_changed *ev = as_zmk_hid_indicators_changed(eh);
++    underglow_indicators_data.indicators = ev->indicators;
++    raise_zmk_underglow_color_changed((struct zmk_underglow_color_changed){
++        .layers = underglow_indicators_data.layers, .wakeup = true});
++
++    return ZMK_EV_EVENT_BUBBLE;
++}
++
++#define KP_INST(n)                                                                                 \
++    static struct underglow_indicators_config underglow_indicators_config_##n = {                  \
++        .indicator = DT_INST_PROP(n, indicator)};                                                  \
++    BEHAVIOR_DT_INST_DEFINE(n, underglow_indicators_init, NULL, &underglow_indicators_data,        \
++                            &underglow_indicators_config_##n, POST_KERNEL,                         \
++                            CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,                                   \
++                            &underglow_indicators_driver_api);
++
++DT_INST_FOREACH_STATUS_OKAY(KP_INST)
++
++#endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
+diff --git a/app/src/events/split_peripheral_layer_changed.c b/app/src/events/split_peripheral_layer_changed.c
+new file mode 100644
+index 00000000000..81f2ab8de00
+--- /dev/null
++++ b/app/src/events/split_peripheral_layer_changed.c
+@@ -0,0 +1,10 @@
++/*
++ * Copyright (c) 2022 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#include <zephyr/kernel.h>
++#include <zmk/events/split_peripheral_layer_changed.h>
++
++ZMK_EVENT_IMPL(zmk_split_peripheral_layer_changed);
+\ No newline at end of file
+diff --git a/app/src/events/underglow_color_changed.c b/app/src/events/underglow_color_changed.c
+new file mode 100644
+index 00000000000..c00bdc6b350
+--- /dev/null
++++ b/app/src/events/underglow_color_changed.c
+@@ -0,0 +1,10 @@
++/*
++ * Copyright (c) 2020 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#include <zephyr/kernel.h>
++#include <zmk/events/underglow_color_changed.h>
++
++ZMK_EVENT_IMPL(zmk_underglow_color_changed);
+\ No newline at end of file
+diff --git a/app/src/keymap.c b/app/src/keymap.c
+index 762dd4f4112..02c9e392469 100644
+--- a/app/src/keymap.c
++++ b/app/src/keymap.c
+@@ -17,6 +17,9 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+ #include <zmk/matrix.h>
+ #include <zmk/sensors.h>
+ #include <zmk/virtual_key_position.h>
++#if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE)
++#include <zmk/split/central.h>
++#endif
+ 
+ #include <zmk/event_manager.h>
+ #include <zmk/events/position_state_changed.h>
+@@ -155,6 +158,9 @@ static inline int set_layer_state(zmk_keymap_layer_id_t layer_id, bool state) {
+         if (ret < 0) {
+             LOG_WRN("Failed to raise layer state changed (%d)", ret);
+         }
++#if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE)
++        zmk_split_central_update_layers(_zmk_keymap_layer_state);
++#endif
+     }
+ 
+     return ret;
+diff --git a/app/src/rgb_underglow.c b/app/src/rgb_underglow.c
+index e93cda91b9f..9af51dc8ba6 100644
+--- a/app/src/rgb_underglow.c
++++ b/app/src/rgb_underglow.c
+@@ -16,6 +16,9 @@
+ #include <zmk/ble.h>
+ #include <zmk/endpoints.h>
+ #include <zmk/keymap.h>
++#include <zmk/matrix.h>
++#include <zmk/behavior.h>
++
+ #include <zmk/hid_indicators.h>
+ #include <zmk/usb.h>
+ 
+@@ -23,19 +26,28 @@
+ 
+ #include <zephyr/drivers/led_strip.h>
+ #include <drivers/ext_power.h>
++#include <drivers/behavior.h>
+ 
+ #include <zmk/rgb_underglow.h>
++#include <zmk/rgb_underglow_layer.h>
+ 
+ #include <zmk/activity.h>
+ #include <zmk/event_manager.h>
+ #include <zmk/events/activity_state_changed.h>
+ #include <zmk/events/usb_conn_state_changed.h>
++#include <zmk/events/underglow_color_changed.h>
++
+ #include <zmk/workqueue.h>
++#include <zmk/events/split_peripheral_layer_changed.h>
+ 
+ #if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
+ #include <zmk/split/central.h>
+ #endif
+ 
++#if !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
++#include <zmk/split/bluetooth/peripheral_layers.h>
++#endif
++
+ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+ 
+ #if !DT_HAS_CHOSEN(zmk_underglow)
+@@ -47,6 +59,11 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+ #define STRIP_CHOSEN DT_CHOSEN(zmk_underglow)
+ #define STRIP_NUM_PIXELS DT_PROP(STRIP_CHOSEN, chain_length)
+ 
++#if DT_HAS_COMPAT_STATUS_OKAY(zmk_underglow_layer) && IS_ENABLED(CONFIG_EXPERIMENTAL_RGB_LAYER)
++#define UNDERGLOW_LAYER_ENABLED 1
++static void zmk_rgb_underglow_set_layer(uint8_t layer, bool wakeup);
++#endif
++
+ #define HUE_MAX 360
+ #define SAT_MAX 100
+ #define BRT_MAX 100
+@@ -59,6 +76,9 @@ enum rgb_underglow_effect {
+     UNDERGLOW_EFFECT_BREATHE,
+     UNDERGLOW_EFFECT_SPECTRUM,
+     UNDERGLOW_EFFECT_SWIRL,
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++    UNDERGLOW_EFFECT_LAYER_INDICATORS,
++#endif
+     UNDERGLOW_EFFECT_NUMBER // Used to track number of underglow effects
+ };
+ 
+@@ -69,6 +89,7 @@ struct rgb_underglow_state {
+     uint16_t animation_step;
+     bool on;
+     bool status_active;
++    bool layer_enabled;
+     uint16_t status_animation_step;
+ };
+ 
+@@ -190,6 +211,23 @@ static void zmk_rgb_underglow_effect_swirl(void) {
+     state.animation_step = state.animation_step % HUE_MAX;
+ }
+ 
++static void zmk_rgb_underglow_effect_layer(void) {
++    bool active = false;
++    for (int i = 0; i < STRIP_NUM_PIXELS; i++) {
++        pixels[i].r -= state.animation_speed < pixels[i].r ? state.animation_speed : pixels[i].r;
++        pixels[i].g -= state.animation_speed < pixels[i].g ? state.animation_speed : pixels[i].g;
++        pixels[i].b -= state.animation_speed < pixels[i].b ? state.animation_speed : pixels[i].b;
++        if (pixels[i].r || pixels[i].g || pixels[i].b) {
++            active = true;
++        }
++    }
++    state.animation_step += state.animation_speed;
++
++    if (state.animation_step > 255 || !active) {
++        zmk_rgb_underglow_transient_off();
++    }
++}
++
+ static int zmk_led_generate_status(void);
+ 
+ static void zmk_led_write_pixels(void) {
+@@ -270,14 +308,15 @@ static void zmk_led_write_pixels(void) {
+ 
+ #if defined(DT_N_S_underglow_indicators_EXISTS)
+ #define UNDERGLOW_INDICATORS_ENABLED 1
++#define LEFT_HALF
+ #else
+ #define UNDERGLOW_INDICATORS_ENABLED 0
++#define RIGHT_HALF
+ #endif
+ 
+ #if !UNDERGLOW_INDICATORS_ENABLED
+ static int zmk_led_generate_status(void) { return 0; }
+ #else
+-
+ const uint8_t underglow_layer_state[] = DT_PROP(UNDERGLOW_INDICATORS, layer_state);
+ const uint8_t underglow_ble_state[] = DT_PROP(UNDERGLOW_INDICATORS, ble_state);
+ const uint8_t underglow_bat_lhs[] = DT_PROP(UNDERGLOW_INDICATORS, bat_lhs);
+@@ -289,6 +328,7 @@ const uint8_t underglow_bat_rhs[] = DT_PROP(UNDERGLOW_INDICATORS, bat_rhs);
+         g : (CONFIG_ZMK_RGB_UNDERGLOW_BRT_MAX * (G)) / 0xff,                                       \
+         b : (CONFIG_ZMK_RGB_UNDERGLOW_BRT_MAX * (B)) / 0xff                                        \
+     })
++
+ const struct led_rgb red = HEXRGB(0xff, 0x00, 0x00);
+ const struct led_rgb yellow = HEXRGB(0xff, 0xff, 0x00);
+ const struct led_rgb green = HEXRGB(0x00, 0xff, 0x00);
+@@ -419,6 +459,13 @@ static int zmk_led_generate_status(void) {
+ }
+ #endif // underglow_indicators exists
+ 
++static inline struct led_rgb hue_sat(int hue, int sat) {
++    struct zmk_led_hsb hsb = state.color;
++    hsb.h = hue;
++    hsb.s = sat;
++    return hsb_to_rgb(hsb_scale_min_max(hsb));
++}
++
+ static void zmk_rgb_underglow_tick(struct k_work *work) {
+     switch (state.current_effect) {
+     case UNDERGLOW_EFFECT_SOLID:
+@@ -433,6 +480,11 @@ static void zmk_rgb_underglow_tick(struct k_work *work) {
+     case UNDERGLOW_EFFECT_SWIRL:
+         zmk_rgb_underglow_effect_swirl();
+         break;
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++    case UNDERGLOW_EFFECT_LAYER_INDICATORS:
++        zmk_rgb_underglow_effect_layer();
++        break;
++#endif
+     }
+ 
+     zmk_led_write_pixels();
+@@ -454,7 +506,6 @@ K_TIMER_DEFINE(underglow_tick, zmk_rgb_underglow_tick_handler, NULL);
+ static int rgb_settings_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg) {
+     const char *next;
+     int rc;
+-
+     if (settings_name_steq(name, "state", &next) && !next) {
+         if (len != sizeof(state)) {
+             return -EINVAL;
+@@ -465,7 +516,11 @@ static int rgb_settings_set(const char *name, size_t len, settings_read_cb read_
+             if (state.on) {
+                 k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(50));
+             }
+-
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++            if (state.layer_enabled) {
++                zmk_rgb_underglow_set_layer(rgb_underglow_top_layer(), true);
++            }
++#endif
+             return 0;
+         }
+ 
+@@ -486,7 +541,6 @@ static struct k_work_delayable underglow_save_work;
+ 
+ static int zmk_rgb_underglow_init(void) {
+     led_strip = DEVICE_DT_GET(STRIP_CHOSEN);
+-
+ #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_EXT_POWER)
+     if (!device_is_ready(ext_power)) {
+         LOG_ERR("External power device \"%s\" is not ready", ext_power->name);
+@@ -517,7 +571,11 @@ static int zmk_rgb_underglow_init(void) {
+     if (state.on) {
+         k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(25));
+     }
+-
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++    if (state.layer_enabled) {
++        zmk_rgb_underglow_set_layer(rgb_underglow_top_layer(), true);
++    }
++#endif
+     return 0;
+ }
+ 
+@@ -534,7 +592,7 @@ int zmk_rgb_underglow_get_state(bool *on_off) {
+     if (!led_strip)
+         return -ENODEV;
+ 
+-    *on_off = state.on;
++    *on_off = state.on || state.layer_enabled;
+     return 0;
+ }
+ 
+@@ -573,6 +631,16 @@ void zmk_rgb_set_ext_power(void) {
+ }
+ 
+ int zmk_rgb_underglow_on(void) {
++    zmk_rgb_underglow_transient_on();
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++    if (state.current_effect == UNDERGLOW_EFFECT_LAYER_INDICATORS) {
++        state.layer_enabled = true;
++    }
++#endif
++    return zmk_rgb_underglow_save_state();
++}
++
++int zmk_rgb_underglow_transient_on(void) {
+     if (!led_strip)
+         return -ENODEV;
+ 
+@@ -582,20 +650,25 @@ int zmk_rgb_underglow_on(void) {
+     state.animation_step = 0;
+     k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(25));
+ 
+-    return zmk_rgb_underglow_save_state();
++    return 0;
+ }
+ 
+ static void zmk_rgb_underglow_off_handler(struct k_work *work) {
+     for (int i = 0; i < STRIP_NUM_PIXELS; i++) {
+         pixels[i] = (struct led_rgb){r : 0, g : 0, b : 0};
+     }
+-
+     zmk_led_write_pixels();
+ }
+ 
+ K_WORK_DEFINE(underglow_off_work, zmk_rgb_underglow_off_handler);
+ 
+ int zmk_rgb_underglow_off(void) {
++    zmk_rgb_underglow_transient_off();
++    state.layer_enabled = false;
++    return zmk_rgb_underglow_save_state();
++}
++
++int zmk_rgb_underglow_transient_off(void) {
+     if (!led_strip)
+         return -ENODEV;
+ 
+@@ -605,7 +678,7 @@ int zmk_rgb_underglow_off(void) {
+     state.on = false;
+     zmk_rgb_set_ext_power();
+ 
+-    return zmk_rgb_underglow_save_state();
++    return 0;
+ }
+ 
+ int zmk_rgb_underglow_calc_effect(int direction) {
+@@ -622,7 +695,9 @@ int zmk_rgb_underglow_select_effect(int effect) {
+ 
+     state.current_effect = effect;
+     state.animation_step = 0;
+-
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++    state.layer_enabled = (effect == UNDERGLOW_EFFECT_LAYER_INDICATORS);
++#endif
+     return zmk_rgb_underglow_save_state();
+ }
+ 
+@@ -634,6 +709,82 @@ int zmk_rgb_underglow_toggle(void) {
+     return state.on ? zmk_rgb_underglow_off() : zmk_rgb_underglow_on();
+ }
+ 
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++
++static struct led_rgb hex_to_rgb(uint8_t r, uint8_t g, uint8_t b) {
++    struct zmk_led_hsb hsb = state.color;
++    return (struct led_rgb){
++        r : (hsb.b * (r)) / 0xff,
++        g : (hsb.b * (g)) / 0xff,
++        b : (hsb.b * (b)) / 0xff
++    };
++}
++
++static int zmk_rgb_underglow_apply_rgbmap(const struct zmk_behavior_binding *bindings,
++                                          size_t rgbmap_len, uint8_t layer) {
++    int rc = 0;
++    for (int i = 0; i < STRIP_NUM_PIXELS; i++) {
++        uint8_t midx = rgb_pixel_lookup(i);
++        if (midx >= ZMK_KEYMAP_LEN) {
++            LOG_DBG("out of range");
++        } else {
++            const struct device *dev = zmk_behavior_get_binding(bindings[midx].behavior_dev);
++
++            if (dev == NULL) {
++                continue;
++            }
++
++            const struct behavior_driver_api *api = (const struct behavior_driver_api *)dev->api;
++
++            if (api->binding_pressed == NULL) {
++                continue;
++            }
++            struct zmk_behavior_binding_event event = {
++                .position = midx, .layer = layer, .timestamp = k_uptime_get()};
++
++            int color = api->binding_pressed((struct zmk_behavior_binding *)&bindings[midx], event);
++
++            if (color > 0) {
++                pixels[i] =
++                    hex_to_rgb((color & 0xFF0000) >> 16, (color & 0xFF00) >> 8, color & 0xFF);
++                rc = 1;
++            } else {
++                pixels[i] = (struct led_rgb){r : 0, g : 0, b : 0};
++            }
++        }
++    }
++    return rc;
++}
++
++static void zmk_rgb_underglow_set_layer(uint8_t layer, bool wakeup) {
++    LOG_DBG("state.layer: %d state.on: %d", state.layer_enabled, state.on);
++    if (!state.layer_enabled)
++        return;
++
++    const struct zmk_behavior_binding *rgbmap = rgb_underglow_get_bindings(layer);
++    if (rgbmap != NULL && zmk_rgb_underglow_apply_rgbmap(rgbmap, ZMK_KEYMAP_LEN, layer)) {
++        if (!state.on) {
++            if (!wakeup) {
++                LOG_DBG("rgb off and no wakeup, abort refresh");
++                return;
++            }
++            zmk_rgb_underglow_transient_on();
++        }
++        k_timer_stop(&underglow_tick);
++        state.animation_step = 0;
++        int fade_delay = zmk_rgbmap_fade_delay(layer);
++        if (fade_delay >= 0) {
++            k_timer_start(&underglow_tick, K_SECONDS(fade_delay), K_MSEC(50));
++        }
++        LOG_DBG("write pixels");
++        zmk_led_write_pixels();
++    } else {
++        if (state.on)
++            zmk_rgb_underglow_transient_off();
++    }
++}
++#endif /* IS_ENABLED(UNDERGLOW_LAYER_ENABLED) */
++
+ static void zmk_led_write_pixels_work(struct k_work *work);
+ static void zmk_rgb_underglow_status_update(struct k_timer *timer);
+ 
+@@ -763,7 +914,7 @@ int zmk_rgb_underglow_change_spd(int direction) {
+ }
+ 
+ #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE) ||                                          \
+-    IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB)
++    IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB) || IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
+ struct rgb_underglow_sleep_state {
+     bool is_awake;
+     bool rgb_state_before_sleeping;
+@@ -782,14 +933,20 @@ static int rgb_underglow_auto_state(bool target_wake_state) {
+     sleep_state.is_awake = target_wake_state;
+ 
+     if (sleep_state.is_awake) {
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++        if (state.layer_enabled) {
++            zmk_rgb_underglow_set_layer(rgb_underglow_top_layer(), true);
++            return 0;
++        }
++#endif
+         if (sleep_state.rgb_state_before_sleeping) {
+-            return zmk_rgb_underglow_on();
++            return zmk_rgb_underglow_transient_on();
+         } else {
+-            return zmk_rgb_underglow_off();
++            return zmk_rgb_underglow_transient_off();
+         }
+     } else {
+         sleep_state.rgb_state_before_sleeping = state.on;
+-        return zmk_rgb_underglow_off();
++        return zmk_rgb_underglow_transient_off();
+     }
+ }
+ 
+@@ -801,6 +958,30 @@ static int rgb_underglow_event_listener(const zmk_event_t *eh) {
+     }
+ #endif
+ 
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++    if (as_zmk_split_peripheral_layer_changed(eh)) {
++        const struct zmk_split_peripheral_layer_changed *ev =
++            as_zmk_split_peripheral_layer_changed(eh);
++        LOG_DBG("zmk_split_peripheral_layer_changed: %08x", ev->layers);
++#if !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
++        set_peripheral_layers_state(ev->layers);
++#endif
++        uint8_t layer = rgb_underglow_top_layer();
++        LOG_DBG("top layer: %d", layer);
++        zmk_rgb_underglow_set_layer(layer, true);
++        return 0;
++    }
++    if (as_zmk_underglow_color_changed(eh)) {
++        const struct zmk_underglow_color_changed *ev = as_zmk_underglow_color_changed(eh);
++        uint8_t layer = rgb_underglow_top_layer();
++        LOG_DBG("refresh layers %d, current: %d, wakeup: %d", ev->layers, layer, ev->wakeup);
++        if ((ev->layers & (BIT(layer))) == BIT(layer)) {
++            zmk_rgb_underglow_set_layer(rgb_underglow_top_layer(), ev->wakeup);
++        }
++        return 0;
++    }
++#endif /* UNDERGLOW_LAYER_ENABLED */
++
+ #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB)
+     if (as_zmk_usb_conn_state_changed(eh)) {
+         return rgb_underglow_auto_state(zmk_usb_is_powered());
+@@ -812,7 +993,8 @@ static int rgb_underglow_event_listener(const zmk_event_t *eh) {
+ 
+ ZMK_LISTENER(rgb_underglow, rgb_underglow_event_listener);
+ #endif // IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE) ||
+-       // IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB)
++       // IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB) ||
++       // IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
+ 
+ #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE)
+ ZMK_SUBSCRIPTION(rgb_underglow, zmk_activity_state_changed);
+@@ -822,4 +1004,9 @@ ZMK_SUBSCRIPTION(rgb_underglow, zmk_activity_state_changed);
+ ZMK_SUBSCRIPTION(rgb_underglow, zmk_usb_conn_state_changed);
+ #endif
+ 
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++ZMK_SUBSCRIPTION(rgb_underglow, zmk_split_peripheral_layer_changed);
++ZMK_SUBSCRIPTION(rgb_underglow, zmk_underglow_color_changed);
++#endif
++
+ SYS_INIT(zmk_rgb_underglow_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+diff --git a/app/src/rgb_underglow_layer.c b/app/src/rgb_underglow_layer.c
+new file mode 100644
+index 00000000000..d3fbbc6e9da
+--- /dev/null
++++ b/app/src/rgb_underglow_layer.c
+@@ -0,0 +1,84 @@
++/*
++ * Copyright (c) 2020 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#include <zephyr/device.h>
++#include <drivers/behavior.h>
++#include <zephyr/sys/util.h>
++#include <zephyr/bluetooth/bluetooth.h>
++#include <zephyr/logging/log.h>
++LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
++
++#include <zmk/matrix.h>
++#include <zmk/keymap.h>
++#include <zmk/rgb_underglow_layer.h>
++
++#if !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
++#include <zmk/split/bluetooth/peripheral_layers.h>
++#endif
++
++#define DT_DRV_COMPAT zmk_underglow_layer
++#if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
++
++#define UNDERGLOW_LAYER_ENABLED
++#define LAYER_ID(node) DT_PROP(node, layer_id)
++#define FADE_DELAY(node) DT_PROP(node, fade_delay)
++
++#define TRANSFORMED_RGB_LAYER(node)                                                                \
++    {COND_CODE_1(DT_NODE_HAS_PROP(node, bindings),                                                 \
++                 (LISTIFY(DT_PROP_LEN(node, bindings), ZMK_RGBMAP_EXTRACT_BINDING, (, ), node)),   \
++                 ())}
++
++#define RGBMAP_VAR(_name, _opts)                                                                   \
++    static _opts struct zmk_behavior_binding _name[ZMK_RGBMAP_LAYERS_LEN][ZMK_KEYMAP_LEN] = {      \
++        DT_INST_FOREACH_CHILD_STATUS_OKAY_SEP(0, TRANSFORMED_RGB_LAYER, (, ))};
++
++RGBMAP_VAR(zmk_rgbmap, COND_CODE_1(IS_ENABLED(CONFIG_ZMK_KEYMAP_SETTINGS_STORAGE), (), (const)))
++
++const int pixel_lookup_table[] = DT_INST_PROP(0, pixel_lookup);
++
++static int zmk_rgbmap_ids[ZMK_RGBMAP_LAYERS_LEN] = {DT_INST_FOREACH_CHILD_SEP(0, LAYER_ID, (, ))};
++static int zmk_rgbmap_fds[ZMK_RGBMAP_LAYERS_LEN] = {DT_INST_FOREACH_CHILD_SEP(0, FADE_DELAY, (, ))};
++
++const int rgb_pixel_lookup(int idx) { return pixel_lookup_table[idx]; };
++
++const int zmk_rgbmap_id(uint8_t layer) {
++    for (uint8_t i = 0; i < ZMK_RGBMAP_LAYERS_LEN; i++) {
++        if (zmk_rgbmap_ids[i] == layer) {
++            return i;
++        }
++    }
++    return -1;
++}
++
++const int zmk_rgbmap_fade_delay(uint8_t layer) { return zmk_rgbmap_fds[zmk_rgbmap_id(layer)]; }
++
++const struct zmk_behavior_binding *rgb_underglow_get_bindings(uint8_t layer) {
++    int rgblayer = zmk_rgbmap_id(layer);
++    if (rgblayer == -1) {
++        return NULL;
++    } else {
++        return zmk_rgbmap[rgblayer];
++    }
++}
++
++uint8_t rgb_underglow_top_layer_with_state(uint32_t state_to_test) {
++    for (uint8_t layer = ZMK_KEYMAP_LAYERS_LEN - 1; layer > 0; layer--) {
++        if ((state_to_test & (BIT(layer))) == (BIT(layer)) || layer == 0) {
++            return layer;
++        }
++    }
++    // return default layer (0)
++    return 0;
++}
++
++uint8_t rgb_underglow_top_layer(void) {
++#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
++    return zmk_keymap_highest_layer_active();
++#else
++    return peripheral_highest_layer_active();
++#endif
++}
++#endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
+\ No newline at end of file
+diff --git a/app/src/split/bluetooth/CMakeLists.txt b/app/src/split/bluetooth/CMakeLists.txt
+index f4e12a9d097..4258b2090fb 100644
+--- a/app/src/split/bluetooth/CMakeLists.txt
++++ b/app/src/split/bluetooth/CMakeLists.txt
+@@ -4,9 +4,12 @@
+ if (NOT CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+   target_sources(app PRIVATE service.c)
+   target_sources(app PRIVATE peripheral.c)
++  target_sources(app PRIVATE peripheral_layers.c)
++
+ endif()
+ if (CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+   target_sources(app PRIVATE central.c)
++  target_sources_ifdef(CONFIG_ZMK_SPLIT_BLE_PREF_IDLE app PRIVATE central_listener.c)
+ endif()
+ 
+ if (CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_PROXY)
+diff --git a/app/src/split/bluetooth/Kconfig b/app/src/split/bluetooth/Kconfig
+index 5f4a782f772..c5f11945da5 100644
+--- a/app/src/split/bluetooth/Kconfig
++++ b/app/src/split/bluetooth/Kconfig
+@@ -74,6 +74,26 @@ config ZMK_SPLIT_BLE_PREF_TIMEOUT
+     int "Supervision timeout to use for split central/peripheral connection"
+     default 400
+ 
++config ZMK_SPLIT_BLE_PREF_IDLE
++    bool "Set slower split peripheral BLE params on idle to save power"
++    default y
++
++if ZMK_SPLIT_BLE_PREF_IDLE
++
++config ZMK_SPLIT_BLE_PREF_IDLE_INT
++    int "Peripheral idle connection interval in 1.25ms units"
++    default 18
++
++config ZMK_SPLIT_BLE_PREF_IDLE_LATENCY
++    int "Peripheral idle latency in Connection Intervals"
++    default 10
++
++config ZMK_SPLIT_BLE_PREF_IDLE_TIMEOUT
++    int "Peripheral idle supervision timeout in 10ms units"
++    default 400
++
++endif # ZMK_SPLIT_BLE_PREF_IDLE
++
+ endif # ZMK_SPLIT_ROLE_CENTRAL
+ 
+ if !ZMK_SPLIT_ROLE_CENTRAL
+diff --git a/app/src/split/bluetooth/central.c b/app/src/split/bluetooth/central.c
+index 66b8219db8f..a1fdf8850b7 100644
+--- a/app/src/split/bluetooth/central.c
++++ b/app/src/split/bluetooth/central.c
+@@ -33,6 +33,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+ #include <zmk/pointing/input_split.h>
+ #include <zmk/hid_indicators_types.h>
+ #include <zmk/physical_layouts.h>
++#include <zmk/events/split_peripheral_layer_changed.h>
+ 
+ static int start_scanning(void);
+ 
+@@ -60,6 +61,8 @@ struct peripheral_slot {
+     uint16_t update_hid_indicators;
+ #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
+     uint16_t selected_physical_layout_handle;
++    uint16_t update_layers_handle;
++
+     uint8_t position_state[POSITION_STATE_DATA_LEN];
+     uint8_t changed_positions[POSITION_STATE_DATA_LEN];
+ };
+@@ -219,6 +222,7 @@ int release_peripheral_slot(int index) {
+ #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
+     slot->update_hid_indicators = 0;
+ #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
++    slot->update_layers_handle = 0;
+ 
+     return 0;
+ }
+@@ -620,6 +624,10 @@ static uint8_t split_central_chrc_discovery_func(struct bt_conn *conn,
+             LOG_DBG("Found update HID indicators handle");
+             slot->update_hid_indicators = bt_gatt_attr_value_handle(attr);
+ #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
++        } else if (!bt_uuid_cmp(((struct bt_gatt_chrc *)attr->user_data)->uuid,
++                                BT_UUID_DECLARE_128(ZMK_SPLIT_BT_UPDATE_LAYERS_UUID))) {
++            LOG_DBG("Found update Layers handle");
++            slot->update_layers_handle = bt_gatt_attr_value_handle(attr);
+ #if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
+         } else if (!bt_uuid_cmp(((struct bt_gatt_chrc *)attr->user_data)->uuid,
+                                 BT_UUID_BAS_BATTERY_LEVEL)) {
+@@ -707,6 +715,8 @@ static uint8_t split_central_chrc_discovery_func(struct bt_conn *conn,
+     }
+ #endif // IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
+ 
++    subscribed = subscribed && slot->update_layers_handle;
++
+     return subscribed ? BT_GATT_ITER_STOP : BT_GATT_ITER_CONTINUE;
+ }
+ 
+@@ -1145,6 +1155,42 @@ static struct settings_handler ble_central_settings_handler = {
+ 
+ #endif // IS_ENABLED(CONFIG_SETTINGS)
+ 
++static uint32_t layers_for_peripheral = 0;
++
++static void split_central_update_layers_callback(struct k_work *work) {
++    uint32_t layers = layers_for_peripheral;
++    for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
++        if (peripherals[i].state != PERIPHERAL_SLOT_STATE_CONNECTED) {
++            continue;
++        }
++
++        if (peripherals[i].update_layers_handle == 0) {
++            continue;
++        }
++
++        int err =
++            bt_gatt_write_without_response(peripherals[i].conn, peripherals[i].update_layers_handle,
++                                           &layers, sizeof(layers), true);
++
++        if (err) {
++            LOG_ERR("Failed to send layers to peripheral (err %d)", err);
++        } else {
++            LOG_DBG("Sent Layers over to peripheral");
++            raise_zmk_split_peripheral_layer_changed(
++                (struct zmk_split_peripheral_layer_changed){.layers = layers});
++        }
++    }
++}
++
++static K_WORK_DEFINE(split_central_update_layers, split_central_update_layers_callback);
++
++int zmk_split_central_update_layers(uint32_t new_layers) {
++    layers_for_peripheral = new_layers;
++    return k_work_submit_to_queue(&split_central_split_run_q, &split_central_update_layers);
++}
++
++// valdur layers done
++
+ static int zmk_split_bt_central_init(void) {
+     k_work_queue_start(&split_central_split_run_q, split_central_split_run_q_stack,
+                        K_THREAD_STACK_SIZEOF(split_central_split_run_q_stack),
+diff --git a/app/src/split/bluetooth/central_listener.c b/app/src/split/bluetooth/central_listener.c
+new file mode 100644
+index 00000000000..87e471cb776
+--- /dev/null
++++ b/app/src/split/bluetooth/central_listener.c
+@@ -0,0 +1,87 @@
++/*
++ * Copyright (c) 2022 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#include <zephyr/logging/log.h>
++
++LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
++
++#include <zephyr/bluetooth/bluetooth.h>
++#include <zephyr/bluetooth/conn.h>
++
++#include <zmk/event_manager.h>
++#include <zmk/events/activity_state_changed.h>
++
++static void set_sleep_params(struct bt_conn *conn, void *data) {
++    struct bt_conn_info info;
++
++    bt_conn_get_info(conn, &info);
++
++    if (info.role == BT_CONN_ROLE_CENTRAL) {
++        int err =
++            bt_conn_le_param_update(conn, BT_LE_CONN_PARAM(CONFIG_ZMK_SPLIT_BLE_PREF_IDLE_INT,
++                                                           CONFIG_ZMK_SPLIT_BLE_PREF_IDLE_INT,
++                                                           CONFIG_ZMK_SPLIT_BLE_PREF_IDLE_LATENCY,
++                                                           CONFIG_ZMK_SPLIT_BLE_PREF_IDLE_TIMEOUT));
++
++        if (err) {
++            LOG_DBG("Failed to sleep split connection: %d", err);
++        }
++    }
++}
++
++static void set_wake_params(struct bt_conn *conn, void *data) {
++    struct bt_conn_info info;
++
++    bt_conn_get_info(conn, &info);
++
++    if (info.role == BT_CONN_ROLE_CENTRAL) {
++        int err = bt_conn_le_param_update(
++            conn,
++            BT_LE_CONN_PARAM(CONFIG_ZMK_SPLIT_BLE_PREF_INT, CONFIG_ZMK_SPLIT_BLE_PREF_INT,
++                             CONFIG_ZMK_SPLIT_BLE_PREF_LATENCY, CONFIG_ZMK_SPLIT_BLE_PREF_TIMEOUT));
++
++        if (err) {
++            LOG_DBG("Failed to wake up split connection: %d", err);
++        }
++    }
++}
++
++static void sleep_all() {
++    LOG_DBG("Setting idle connection parameters on peripherals");
++
++    bt_conn_foreach(BT_CONN_TYPE_LE, set_sleep_params, NULL);
++}
++
++static void wake_all() {
++    LOG_DBG("Waking up from idle connection parameters on peripherals");
++
++    bt_conn_foreach(BT_CONN_TYPE_LE, set_wake_params, NULL);
++}
++
++int central_event_handler(const zmk_event_t *eh) {
++    struct zmk_activity_state_changed *ev = as_zmk_activity_state_changed(eh);
++    if (ev == NULL) {
++        return -ENOTSUP;
++    }
++
++    switch (ev->state) {
++    case ZMK_ACTIVITY_ACTIVE:
++        wake_all();
++        break;
++    case ZMK_ACTIVITY_IDLE:
++        sleep_all();
++        break;
++    case ZMK_ACTIVITY_SLEEP:
++        break;
++    default:
++        LOG_WRN("Unhandled activity state: %d", ev->state);
++        return -EINVAL;
++    }
++    return 0;
++}
++
++ZMK_LISTENER(central, central_event_handler);
++ZMK_SUBSCRIPTION(central, zmk_activity_state_changed);
+diff --git a/app/src/split/bluetooth/peripheral_layers.c b/app/src/split/bluetooth/peripheral_layers.c
+new file mode 100644
+index 00000000000..c5e8c68dc11
+--- /dev/null
++++ b/app/src/split/bluetooth/peripheral_layers.c
+@@ -0,0 +1,25 @@
++
++#include <zephyr/types.h>
++#include <zephyr/sys/util.h>
++
++#include <zmk/split/bluetooth/peripheral_layers.h>
++#include <zmk/keymap.h>
++
++static uint32_t peripheral_layers = 0;
++
++void set_peripheral_layers_state(uint32_t new_layers) { peripheral_layers = new_layers; }
++
++bool peripheral_layer_active(uint8_t layer) {
++    return (peripheral_layers & (BIT(layer))) == (BIT(layer));
++};
++
++uint8_t peripheral_highest_layer_active(void) {
++    if (peripheral_layers > 0) {
++        for (uint8_t layer = ZMK_KEYMAP_LAYERS_LEN - 1; layer > 0; layer--) {
++            if ((peripheral_layers & (BIT(layer))) == (BIT(layer)) || layer == 0) {
++                return layer;
++            }
++        }
++    }
++    return 0;
++}
+\ No newline at end of file
+diff --git a/app/src/split/bluetooth/service.c b/app/src/split/bluetooth/service.c
+index 5bbed1373e6..9f02a4ca390 100644
+--- a/app/src/split/bluetooth/service.c
++++ b/app/src/split/bluetooth/service.c
+@@ -31,9 +31,11 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+ #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
+ #include <zmk/events/hid_indicators_changed.h>
+ #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
++#include <zmk/split/bluetooth/peripheral_layers.h>
+ 
+ #include <zmk/events/sensor_event.h>
+ #include <zmk/sensors.h>
++#include <zmk/events/split_peripheral_layer_changed.h>
+ 
+ #if ZMK_KEYMAP_HAS_SENSORS
+ static struct sensor_event last_sensor_event;
+@@ -139,6 +141,31 @@ static ssize_t split_svc_get_selected_phys_layout(struct bt_conn *conn,
+     return bt_gatt_attr_read(conn, attrs, buf, len, offset, &selected, sizeof(selected));
+ }
+ 
++static uint32_t layers = 0;
++
++static void split_svc_update_layers_callback(struct k_work *work) {
++    LOG_DBG("Setting peripheral layers: %x", layers);
++    // set_peripheral_layers_state(layers);
++    raise_zmk_split_peripheral_layer_changed(
++        (struct zmk_split_peripheral_layer_changed){.layers = layers});
++}
++
++static K_WORK_DEFINE(split_svc_update_layers_work, split_svc_update_layers_callback);
++
++static ssize_t split_svc_update_layers(struct bt_conn *conn, const struct bt_gatt_attr *attr,
++                                       const void *buf, uint16_t len, uint16_t offset,
++                                       uint8_t flags) {
++    if (offset + len > sizeof(uint32_t)) {
++        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
++    }
++
++    memcpy((uint8_t *)&layers + offset, buf, len);
++
++    k_work_submit(&split_svc_update_layers_work);
++
++    return len;
++}
++
+ #if IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
+ 
+ static void split_input_events_ccc(const struct bt_gatt_attr *attr, uint16_t value) {
+@@ -204,8 +231,11 @@ BT_GATT_SERVICE_DEFINE(
+     BT_GATT_CHARACTERISTIC(BT_UUID_DECLARE_128(ZMK_SPLIT_BT_SELECT_PHYS_LAYOUT_UUID),
+                            BT_GATT_CHRC_WRITE | BT_GATT_CHRC_READ,
+                            BT_GATT_PERM_WRITE_ENCRYPT | BT_GATT_PERM_READ_ENCRYPT,
+-                           split_svc_get_selected_phys_layout, split_svc_select_phys_layout,
+-                           NULL), );
++                           split_svc_get_selected_phys_layout, split_svc_select_phys_layout, NULL),
++
++    BT_GATT_CHARACTERISTIC(BT_UUID_DECLARE_128(ZMK_SPLIT_BT_UPDATE_LAYERS_UUID),
++                           BT_GATT_CHRC_WRITE_WITHOUT_RESP, BT_GATT_PERM_WRITE_ENCRYPT, NULL,
++                           split_svc_update_layers, NULL), );
+ 
+ K_THREAD_STACK_DEFINE(service_q_stack, CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_STACK_SIZE);
+ 
+diff --git a/lambda/compiler.rb b/lambda/compiler.rb
+index fe9e91f2a5b..3f679be265a 100644
+--- a/lambda/compiler.rb
++++ b/lambda/compiler.rb
+@@ -23,8 +23,8 @@ def compile(board, keymap_data, lhs_kconfig_data, rhs_kconfig_data)
+     board_rh = board + '_rh'
+ 
+     if rhs_kconfig_data && !rhs_kconfig_data.empty?
+-      lhs_result, lhs_output = compile_board(board_lh, keymap_data:,     kconfig_data: lhs_kconfig_data, include_static_rhs: false)
+-      rhs_result, rhs_output = compile_board(board_rh, keymap_data: nil, kconfig_data: rhs_kconfig_data, include_static_rhs: false)
++      lhs_result, lhs_output = compile_board(board_lh, keymap_data:, kconfig_data: lhs_kconfig_data, include_static_rhs: false)
++      rhs_result, rhs_output = compile_board(board_rh, keymap_data:, kconfig_data: rhs_kconfig_data, include_static_rhs: false)
+       [
+         lhs_result.concat(rhs_result),
+         ["LHS Output:", *lhs_output, "RHS Output:", *rhs_output],
+@@ -91,7 +91,7 @@ def compile_board(board, keymap_data:, kconfig_data:, include_static_rhs: false)
+   end
+ 
+   PERMITTED_DTS_SECTIONS = %w[
+-    behaviors macros combos conditional_layers keymap underglow-indicators
++    behaviors macros combos conditional_layers keymap underglow-indicators underglow-layer
+     cirque_lh_listener cirque_rh_listener
+     input_processors
+     mkp_input_listener mmv_input_listener msc_input_listener
