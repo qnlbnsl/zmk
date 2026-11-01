@@ -75,14 +75,28 @@ static int start_advertising(bool low_duty) {
 static bool low_duty_advertising = false;
 static bool enabled = false;
 
+// Advertising can fail transiently right after a disconnect: the old connection object is still
+// held (e.g. by queued key notifications when the central vanished mid-typing), so with
+// BT_MAX_CONN=1 there is no free connection to advertise for. Retry until it succeeds instead of
+// giving up, otherwise the half never reconnects until it is rebooted.
+#define ADV_RETRY_MS 200
+
+static void advertising_cb(struct k_work *work);
+K_WORK_DELAYABLE_DEFINE(advertising_work, advertising_cb);
+
 static void advertising_cb(struct k_work *work) {
+    if (!enabled || is_connected) {
+        return;
+    }
     const int err = start_advertising(low_duty_advertising);
+    if (err == -EALREADY) {
+        return;
+    }
     if (err < 0) {
-        LOG_ERR("Failed to start advertising (%d)", err);
+        LOG_WRN("Failed to start advertising (%d), retrying", err);
+        k_work_schedule(&advertising_work, K_MSEC(ADV_RETRY_MS));
     }
 }
-
-K_WORK_DEFINE(advertising_work, advertising_cb);
 
 static void connected(struct bt_conn *conn, uint8_t err) {
     is_connected = (err == 0);
@@ -90,9 +104,10 @@ static void connected(struct bt_conn *conn, uint8_t err) {
     raise_zmk_split_peripheral_status_changed(
         (struct zmk_split_peripheral_status_changed){.connected = is_connected});
 
-    if (err == BT_HCI_ERR_ADV_TIMEOUT && enabled) {
-        low_duty_advertising = true;
-        k_work_submit(&advertising_work);
+    // Restart advertising after any failed connection, not just a directed-advertising timeout.
+    if (err && enabled) {
+        low_duty_advertising = (err == BT_HCI_ERR_ADV_TIMEOUT);
+        k_work_schedule(&advertising_work, K_NO_WAIT);
     }
 }
 
@@ -110,7 +125,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason) {
 
     if (enabled) {
         low_duty_advertising = false;
-        k_work_submit(&advertising_work);
+        k_work_schedule(&advertising_work, K_NO_WAIT);
     }
 }
 
@@ -171,9 +186,10 @@ static int split_peripheral_bt_set_enabled(bool en) {
 
     enabled = en;
     if (en) {
-        k_work_submit(&advertising_work);
+        k_work_schedule(&advertising_work, K_NO_WAIT);
         return 0;
     } else {
+        k_work_cancel_delayable(&advertising_work);
         struct bt_conn *conn = NULL;
         bt_conn_foreach(BT_CONN_TYPE_LE, find_first_conn, &conn);
         if (conn) {
