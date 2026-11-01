@@ -625,6 +625,8 @@ void zmk_rgb_set_ext_power(void) {
     }
 #endif // CONFIG_ZMK_BATTERY_REPORTING
 
+    LOG_DBG("ext power: on %d status %d current %d -> desired %d", state.on, state.status_active,
+            c_power, desired_state);
     if (desired_state && !c_power) {
         int rc = ext_power_enable(ext_power);
         if (rc != 0) {

@@ -1164,6 +1164,8 @@ static void split_central_update_layers_callback(struct k_work *work) {
             continue;
         }
 
+        LOG_DBG("Layers %08x -> peripheral %d (handle %d)", layers, i,
+                peripherals[i].update_layers_handle);
         if (peripherals[i].update_layers_handle == 0) {
             continue;
         }
