@@ -539,7 +539,21 @@ static int rgb_settings_set(const char *name, size_t len, settings_read_cb read_
     return -ENOENT;
 }
 
-SETTINGS_STATIC_HANDLER_DEFINE(rgb_underglow, "rgb/underglow", NULL, rgb_settings_set, NULL, NULL);
+// Runs after every settings handler has loaded, including ext-power's, which may have switched
+// the LED supply off after we drew the boot frame. Redraw and re-assert the supply here.
+static int rgb_settings_commit(void) {
+#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
+    if (state.layer_enabled) {
+        zmk_rgb_underglow_set_layer(rgb_underglow_top_layer(), true);
+        return 0;
+    }
+#endif
+    zmk_rgb_set_ext_power();
+    return 0;
+}
+
+SETTINGS_STATIC_HANDLER_DEFINE(rgb_underglow, "rgb/underglow", NULL, rgb_settings_set,
+                               rgb_settings_commit, NULL);
 
 static void zmk_rgb_underglow_save_state_work(struct k_work *_work) {
     settings_save_one("rgb/underglow/state", &state, sizeof(state));
@@ -786,6 +800,10 @@ static void zmk_rgb_underglow_set_layer(uint8_t layer, bool wakeup) {
                 return;
             }
             zmk_rgb_underglow_transient_on();
+        } else {
+            // state.on alone doesn't mean the LEDs are powered: ext-power restores its own saved
+            // state from flash at boot (often "off" now that the LEDs fade out and power down).
+            zmk_rgb_set_ext_power();
         }
         k_timer_stop(&underglow_tick);
         state.animation_step = 0;
