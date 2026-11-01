@@ -238,6 +238,11 @@ static void zmk_led_write_pixels(void) {
 
 #if IS_ENABLED(CONFIG_ZMK_BATTERY_REPORTING)
     bat0 = zmk_battery_state_of_charge();
+    // 0 means "not read yet" (the battery is first sampled after boot), not empty: treating it
+    // as empty blanked the LEDs at boot and turned underglow off until the next layer change.
+    if (bat0 == 0) {
+        bat0 = 100;
+    }
 #else
     bat0 = 100;
 #endif
@@ -619,7 +624,8 @@ void zmk_rgb_set_ext_power(void) {
 #if IS_ENABLED(CONFIG_ZMK_BATTERY_REPORTING)
     // force power off, when battery low (<10%)
     if (state.on && !state.status_active) {
-        if (zmk_battery_state_of_charge() < 10) {
+        uint8_t soc = zmk_battery_state_of_charge();
+        if (soc > 0 && soc < 10) { // 0 = not read yet
             desired_state = false;
         }
     }
