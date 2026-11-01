@@ -904,11 +904,22 @@ struct zmk_led_hsb zmk_rgb_underglow_calc_brt(int direction) {
     return color;
 }
 
+/* With the layer-indicator effect the LEDs only get painted on a layer change (then fade out),
+ * so a colour change would stay invisible until the next one. Repaint now for feedback. */
+static void refresh_after_color_change(void) {
+#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
+    if (state.current_effect == UNDERGLOW_EFFECT_LAYER_INDICATORS) {
+        zmk_rgb_underglow_set_layer(rgb_underglow_top_layer(), true);
+    }
+#endif
+}
+
 int zmk_rgb_underglow_change_hue(int direction) {
     if (!led_strip)
         return -ENODEV;
 
     state.color = zmk_rgb_underglow_calc_hue(direction);
+    refresh_after_color_change();
 
     return zmk_rgb_underglow_save_state();
 }
@@ -918,6 +929,7 @@ int zmk_rgb_underglow_change_sat(int direction) {
         return -ENODEV;
 
     state.color = zmk_rgb_underglow_calc_sat(direction);
+    refresh_after_color_change();
 
     return zmk_rgb_underglow_save_state();
 }
@@ -927,6 +939,7 @@ int zmk_rgb_underglow_change_brt(int direction) {
         return -ENODEV;
 
     state.color = zmk_rgb_underglow_calc_brt(direction);
+    refresh_after_color_change();
 
     return zmk_rgb_underglow_save_state();
 }
