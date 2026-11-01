@@ -16,3 +16,8 @@
 #define HID_INDICATOR_SCROLL_LOCK (1 << (HID_USAGE_LED_SCROLL_LOCK - HID_USAGE_LED_NUM_LOCK))
 #define HID_INDICATOR_COMPOSE (1 << (HID_USAGE_LED_COMPOSE - HID_USAGE_LED_NUM_LOCK))
 #define HID_INDICATOR_KANA (1 << (HID_USAGE_LED_KANA - HID_USAGE_LED_NUM_LOCK))
+
+// Indicator bit indices (used by the underglow indicators binding).
+#define NUM_LOCK 0
+#define CAPS_LOCK 1
+#define SCROLL_LOCK 2

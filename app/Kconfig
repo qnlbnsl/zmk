@@ -226,6 +226,16 @@ config ZMK_BLE_MOUSE_REPORT_QUEUE_SIZE
 config ZMK_BLE_CLEAR_BONDS_ON_START
     bool "Configuration that clears all bond information from the keyboard on startup."
 
+config ZMK_BLE_DEVICE_NAME_APPEND_SN
+    bool "Append the device serial number to the Bluetooth device name"
+    default n
+    select BT_DEVICE_NAME_DYNAMIC
+
+config ZMK_BLE_DEVICE_NAME_SN_CHARS
+    int "Number of hexadecimal digits of serial number to append to the BT device name"
+    default 6
+    depends on ZMK_BLE_DEVICE_NAME_APPEND_SN
+
 # HID GATT notifications sent this way are *not* picked up by Linux, and possibly others.
 config BT_GATT_NOTIFY_MULTIPLE
     default n
@@ -334,7 +344,10 @@ config ZMK_RGB_UNDERGLOW_SPD_START
 
 config ZMK_RGB_UNDERGLOW_EFF_START
     int "RGB underglow start effect int value related to the effect enum list"
+    range 0 4 if EXPERIMENTAL_RGB_LAYER
     range 0 3
+    help
+      0 solid, 1 breathe, 2 spectrum, 3 swirl, 4 layer indicators (EXPERIMENTAL_RGB_LAYER).
 
 config ZMK_RGB_UNDERGLOW_ON_START
     bool "RGB underglow starts on by default"
@@ -346,7 +359,59 @@ config ZMK_RGB_UNDERGLOW_AUTO_OFF_USB
     bool "Turn off RGB underglow when USB is disconnected"
     depends on USB_DEVICE_STACK
 
+config EXPERIMENTAL_RGB_LAYER
+    bool "Experimental per-key per-layer RGB underglow"
+    default n
+
 endif # ZMK_RGB_UNDERGLOW
+
+config ZMK_RGB_UNDERGLOW_FORWARD
+    bool "Forward RGB underglow behaviors from a central without an LED strip"
+    depends on !ZMK_RGB_UNDERGLOW && ZMK_SPLIT && ZMK_SPLIT_ROLE_CENTRAL
+    help
+      Build the &rgb_ug behavior on a split central that has no underglow of its own (e.g. a
+      dongle), so RGB keys are converted and forwarded to the peripherals instead of dropped.
+      The FORWARD_* start values should match the peripherals' underglow configuration.
+
+if ZMK_RGB_UNDERGLOW_FORWARD
+
+config ZMK_RGB_UNDERGLOW_FORWARD_ON_START
+    bool "Peripherals start with underglow on"
+    default y
+
+config ZMK_RGB_UNDERGLOW_FORWARD_EFF_COUNT
+    int "Number of underglow effects on the peripherals (5 with EXPERIMENTAL_RGB_LAYER)"
+    default 5
+
+config ZMK_RGB_UNDERGLOW_FORWARD_EFF_START
+    int "Peripherals' start effect (4 = layer indicators)"
+    default 4
+
+config ZMK_RGB_UNDERGLOW_FORWARD_HUE_START
+    int "Peripherals' start hue"
+    default 285
+
+config ZMK_RGB_UNDERGLOW_FORWARD_SAT_START
+    int "Peripherals' start saturation"
+    default 75
+
+config ZMK_RGB_UNDERGLOW_FORWARD_BRT_START
+    int "Peripherals' start brightness"
+    default 16
+
+config ZMK_RGB_UNDERGLOW_FORWARD_HUE_STEP
+    int "Hue step"
+    default 10
+
+config ZMK_RGB_UNDERGLOW_FORWARD_SAT_STEP
+    int "Saturation step"
+    default 10
+
+config ZMK_RGB_UNDERGLOW_FORWARD_BRT_STEP
+    int "Brightness step"
+    default 4
+
+endif # ZMK_RGB_UNDERGLOW_FORWARD
 
 menuconfig ZMK_BACKLIGHT
     bool "LED backlight"
@@ -446,6 +511,16 @@ config ZMK_GPIO_KEY_WAKEUP_TRIGGER
     depends on DT_HAS_ZMK_GPIO_KEY_WAKEUP_TRIGGER_ENABLED && ZMK_PM_SOFT_OFF
 
 # Power Management
+if ZMK_EXT_POWER
+
+config ZMK_EXT_POWER_START
+    bool "Enable external power output by default"
+    default y
+
+#ZMK_EXT_POWER
+endif
+
+#Power Management
 endmenu
 
 menu "Combo options"

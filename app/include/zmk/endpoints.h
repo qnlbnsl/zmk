@@ -99,6 +99,11 @@ bool zmk_endpoint_is_connected(void);
  */
 int zmk_endpoint_send_report(uint16_t usage_page);
 
+/**
+ * Returns whether the selected endpoint uses the preferred transport.
+ */
+bool zmk_endpoints_preferred_transport_is_active(void);
+
 #if IS_ENABLED(CONFIG_ZMK_POINTING)
 /**
  * Sends the HID mouse report to the selected endpoint.
